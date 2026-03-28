@@ -143,12 +143,11 @@ You should see the web controller:
 
 ## 3D case
 
-The case has two parts:
+The electronics case (body + back) is in the `clawd_mochi` model folder:
 
-| File                                                             | Description                               |
-| ---------------------------------------------------------------- | ----------------------------------------- |
-| [`./models/clawd_mochi_body.stl`](./models/clawd_mochi_body.stl) | Main crab body with display window cutout |
-| [`./models/clawd_mochi_back.stl`](./models/clawd_mochi_back.stl) | Back plate with USB-C access slot         |
+| File                                                                                 | Description                               |
+| ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| [`./models/clawd_mochi/clawd_mochi_v1.stl`](./models/clawd_mochi/clawd_mochi_v1.stl) | Main case layout with body and back parts |
 
 ### Print settings
 
@@ -164,11 +163,21 @@ Suggested colors: orange PLA for body, matte black for back plate.
 
 You can also download the models from MakerWorld: [https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000](https://makerworld.com/en/models/2559505-clawd-mochi-physical-claude-code-mascot#profileId-2820000)
 
+### 3D Clawd (no electronics)
+
+If you just want a display piece, use the separate 3D Clawd model (no screen or electronics cutouts).
+
+<img src="pics/clawd_3D_4_3.png" alt="3D printed Clawd model" width="500"/>
+
+Model file: [`./models/clawd_3d/Clawd_3D_no_AMS.stl`](./models/clawd_3d/Clawd_3D_no_AMS.stl)
+
+You can also download the models from MakerWorld: [https://makerworld.com/en/models/2576503-clawd-claude-code-mascot#profileId-2841183](https://makerworld.com/en/models/2576503-clawd-claude-code-mascot#profileId-2841183)
+
 ---
 
 ## Assembly tips
 
-1. Print both parts and test-fit the display before gluing anything
+1. Print the case file (body + back) and test-fit the display before gluing anything
 2. Thread the 8 wires through the back plate slot before soldering
 3. Use double-sided tape to fix the ESP32 against the inside of the back plate
 4. Secure the display with 2× M2×6mm screws through the bezel holes
