@@ -3,12 +3,11 @@
  *   CLAWD MOCHI — ESP32-C3 Super Mini + ST7789 1.54" 240×240
  *
  *   Wiring:
- *     SDA → GPIO 10  (hardware SPI MOSI)
- *     SCL → GPIO 8   (hardware SPI SCK)
- *     RST → GPIO 2
+ *     SDA → GPIO 5   (hardware SPI MOSI)
+ *     SCL → GPIO 4   (hardware SPI SCK)
+ *     RST → GPIO 0
  *     DC  → GPIO 1
- *     CS  → GPIO 4
- *     BL  → GPIO 3
+ *     BLK → GPIO 10  (PWM backlight)
  *     VCC → 3V3
  *     GND → GND
  *
@@ -16,20 +15,37 @@
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
+#include <Arduino_GFX_Library.h>
 #include <SPI.h>
 #include <math.h>
 #include <WiFi.h>
 #include <WebServer.h>
 
 // ── Pins ──────────────────────────────────────────────────────
-#define TFT_CS  4
 #define TFT_DC  1
-#define TFT_RST 2
-#define TFT_BLK 3
+#define TFT_RST 0
+#define TFT_BLK 10
 
-Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+// ── PWM Backlight ─────────────────────────────────────────────
+#define PWM_FREQ 5000
+#define PWM_RES  8
+
+Arduino_DataBus *bus = new Arduino_HWSPI(
+  TFT_DC,  // DC
+  -1,      // CS
+  4,       // SCLK
+  5,       // MOSI
+  -1       // MISO
+);
+
+Arduino_GFX *gfx = new Arduino_ST7789(
+  bus,
+  TFT_RST,  // RST
+  0,        // rotation
+  true,     // IPS
+  240,      // width
+  240       // height
+);
 
 // ── WiFi ──────────────────────────────────────────────────────
 const char* AP_SSID = "ClaWD-Mochi";
@@ -40,17 +56,17 @@ WebServer server(80);
 #define DISP_W 240
 #define DISP_H 240
 
-// ── Eye constants (shared by both eye views) ──────────────────
+// ── Eye constants ─────────────────────────────────────────────
 #define EYE_W   30
 #define EYE_H   60
 #define EYE_GAP 120
-#define EYE_OX  0     // horizontal offset
-#define EYE_OY  40    // vertical offset upward (subtracted from centre)
+#define EYE_OX  0
+#define EYE_OY  40
 
 // ── Colours ───────────────────────────────────────────────────
 uint16_t C_ORANGE, C_DARKBG, C_MUTED, C_GREEN;
-#define C_WHITE ST77XX_WHITE
-#define C_BLACK ST77XX_BLACK
+#define C_WHITE 0xFFFF
+#define C_BLACK 0x0000
 
 // ── State ─────────────────────────────────────────────────────
 #define VIEW_EYES_NORMAL 0
@@ -61,10 +77,10 @@ uint16_t C_ORANGE, C_DARKBG, C_MUTED, C_GREEN;
 uint8_t  currentView  = VIEW_EYES_NORMAL;
 bool     busy         = false;
 bool     backlightOn  = true;
-uint8_t  animSpeed    = 1;   // 1=slow(default) 2=normal 3=fast
+uint8_t  animSpeed    = 1;
 
-uint16_t animBgColor  = 0;   // background for eye/logo animations
-uint16_t drawBgColor  = 0;   // background for canvas
+uint16_t animBgColor  = 0;
+uint16_t drawBgColor  = 0;
 
 // ── Terminal ──────────────────────────────────────────────────
 #define TERM_COLS      15
@@ -200,20 +216,19 @@ uint16_t hexToRgb565(String hex) {
   hex.replace("#", "");
   if (hex.length() != 6) return C_WHITE;
   long v = strtol(hex.c_str(), nullptr, 16);
-  return tft.color565((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+  return gfx->color565((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
 }
 
 void setBacklight(bool on) {
   backlightOn = on;
-  digitalWrite(TFT_BLK, on ? HIGH : LOW);
+  ledcWrite(TFT_BLK, on ? 255 : 0);
 }
 
 void initColours() {
-  // C_ORANGE = tft.color565(170, 72, 28);
-  C_ORANGE = tft.color565(218, 17, 0);
-  C_DARKBG = tft.color565(10,  12,  16);
-  C_MUTED  = tft.color565(90,  88,  86);
-  C_GREEN  = tft.color565(80, 220, 130);
+  C_ORANGE = gfx->color565(218, 17,  0);
+  C_DARKBG = gfx->color565(10,  12,  16);
+  C_MUTED  = gfx->color565(90,  88,  86);
+  C_GREEN  = gfx->color565(80,  220, 130);
   animBgColor = C_ORANGE;
   drawBgColor = C_ORANGE;
 }
@@ -223,24 +238,23 @@ void initColours() {
 // ═════════════════════════════════════════════════════════════
 
 void drawLogoFilled(uint16_t bg, uint16_t fg) {
-  tft.fillScreen(bg);
+  gfx->fillScreen(bg);
   for (uint16_t i = 0; i < LOGO_TRI_COUNT; i++) {
-    tft.fillTriangle(
+    gfx->fillTriangle(
       pgm_read_word(&LOGO_TRIS[i][0]), pgm_read_word(&LOGO_TRIS[i][1]),
       pgm_read_word(&LOGO_TRIS[i][2]), pgm_read_word(&LOGO_TRIS[i][3]),
       pgm_read_word(&LOGO_TRIS[i][4]), pgm_read_word(&LOGO_TRIS[i][5]),
       fg);
   }
-  tft.setTextColor(fg); tft.setTextSize(2);
-  tft.setCursor(LOGO_CX - 54, 210); tft.print("Anthropic");
-  tft.setCursor(LOGO_CX - 53, 210); tft.print("Anthropic");
+  gfx->setTextColor(fg); gfx->setTextSize(2);
+  gfx->setCursor(LOGO_CX - 54, 210); gfx->print("Anthropic");
+  gfx->setCursor(LOGO_CX - 53, 210); gfx->print("Anthropic");
 }
 
 // ═════════════════════════════════════════════════════════════
 //  VIEWS
 // ═════════════════════════════════════════════════════════════
 
-// Eye helpers — shared constants via #define EYE_*
 inline int16_t eyeLX(int16_t ox) {
   return (DISP_W - (EYE_W * 2 + EYE_GAP)) / 2 + EYE_OX + ox;
 }
@@ -249,14 +263,14 @@ inline int16_t eyeY()            { return (DISP_H - EYE_H) / 2 - EYE_OY; }
 inline int16_t eyeCY()           { return eyeY() + EYE_H / 2; }
 
 void drawNormalEyes(int16_t ox = 0, bool blink = false) {
-  tft.fillScreen(animBgColor);
+  gfx->fillScreen(animBgColor);
   const int16_t lx = eyeLX(ox), rx = eyeRX(ox), ey = eyeY();
   if (!blink) {
-    tft.fillRect(lx, ey, EYE_W, EYE_H, C_BLACK);
-    tft.fillRect(rx, ey, EYE_W, EYE_H, C_BLACK);
+    gfx->fillRect(lx, ey, EYE_W, EYE_H, C_BLACK);
+    gfx->fillRect(rx, ey, EYE_W, EYE_H, C_BLACK);
   } else {
-    tft.fillRect(lx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
-    tft.fillRect(rx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
+    gfx->fillRect(lx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
+    gfx->fillRect(rx, ey + EYE_H / 2 - 3, EYE_W, 6, C_BLACK);
   }
 }
 
@@ -264,17 +278,17 @@ void drawChevron(int16_t cx, int16_t cy, int16_t arm, int16_t reach,
                  uint8_t thk, bool rightFacing, uint16_t col) {
   for (int8_t t = -(int8_t)thk; t <= (int8_t)thk; t++) {
     if (rightFacing) {
-      tft.drawLine(cx - reach/2, cy - arm + t, cx + reach/2, cy + t,      col);
-      tft.drawLine(cx + reach/2, cy + t,       cx - reach/2, cy + arm + t, col);
+      gfx->drawLine(cx - reach/2, cy - arm + t, cx + reach/2, cy + t,       col);
+      gfx->drawLine(cx + reach/2, cy + t,        cx - reach/2, cy + arm + t, col);
     } else {
-      tft.drawLine(cx + reach/2, cy - arm + t, cx - reach/2, cy + t,      col);
-      tft.drawLine(cx - reach/2, cy + t,       cx + reach/2, cy + arm + t, col);
+      gfx->drawLine(cx + reach/2, cy - arm + t, cx - reach/2, cy + t,       col);
+      gfx->drawLine(cx - reach/2, cy + t,        cx + reach/2, cy + arm + t, col);
     }
   }
 }
 
 void drawSquishEyes(bool closed = false) {
-  tft.fillScreen(animBgColor);
+  gfx->fillScreen(animBgColor);
   const int16_t lx = eyeLX(0), rx = eyeRX(0), cy = eyeCY();
   const int16_t arm   = EYE_H / 2;
   const int16_t reach = EYE_W / 2;
@@ -284,21 +298,21 @@ void drawSquishEyes(bool closed = false) {
     drawChevron(lcx, cy, arm, reach, 10, true,  C_BLACK);
     drawChevron(rcx, cy, arm, reach, 10, false, C_BLACK);
   } else {
-    tft.fillRect(lx, cy - 5, EYE_W, 10, C_BLACK);
-    tft.fillRect(rx, cy - 5, EYE_W, 10, C_BLACK);
+    gfx->fillRect(lx, cy - 5, EYE_W, 10, C_BLACK);
+    gfx->fillRect(rx, cy - 5, EYE_W, 10, C_BLACK);
   }
 }
 
 void drawCodeView() {
   termMode = false;
-  tft.fillScreen(C_DARKBG);
-  tft.fillRect(0, 0,          DISP_W, 4, C_ORANGE);
-  tft.fillRect(0, DISP_H - 4, DISP_W, 4, C_ORANGE);
-  tft.setTextColor(C_ORANGE); tft.setTextSize(4);
-  tft.setCursor((DISP_W - 144) / 2, DISP_H / 2 - 52); tft.print("Claude");
-  tft.setTextColor(C_WHITE);  tft.setTextSize(4);
-  tft.setCursor((DISP_W - 96) / 2,  DISP_H / 2 + 8);  tft.print("Code");
-  tft.fillRect((DISP_W - 96) / 2, DISP_H / 2 + 52, 96, 3, C_ORANGE);
+  gfx->fillScreen(C_DARKBG);
+  gfx->fillRect(0, 0,          DISP_W, 4, C_ORANGE);
+  gfx->fillRect(0, DISP_H - 4, DISP_W, 4, C_ORANGE);
+  gfx->setTextColor(C_ORANGE); gfx->setTextSize(4);
+  gfx->setCursor((DISP_W - 144) / 2, DISP_H / 2 - 52); gfx->print("Claude");
+  gfx->setTextColor(C_WHITE);  gfx->setTextSize(4);
+  gfx->setCursor((DISP_W - 96) / 2,  DISP_H / 2 + 8);  gfx->print("Code");
+  gfx->fillRect((DISP_W - 96) / 2, DISP_H / 2 + 52, 96, 3, C_ORANGE);
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -311,32 +325,30 @@ void termClear() {
 }
 
 void termDrawHeader() {
-  tft.fillRect(0, 0, DISP_W, TERM_PAD_Y + 1, C_DARKBG);
-  tft.setTextColor(C_ORANGE); tft.setTextSize(1);
-  tft.setCursor(TERM_PAD_X, 4); tft.print("clawd@mochi terminal");
-  tft.drawFastHLine(0, TERM_PAD_Y, DISP_W, C_ORANGE);
+  gfx->fillRect(0, 0, DISP_W, TERM_PAD_Y + 1, C_DARKBG);
+  gfx->setTextColor(C_ORANGE); gfx->setTextSize(1);
+  gfx->setCursor(TERM_PAD_X, 4); gfx->print("clawd@mochi terminal");
+  gfx->drawFastHLine(0, TERM_PAD_Y, DISP_W, C_ORANGE);
 }
 
-// Prefix "clawd:~$ " in green, drawn only when the row has content
 void termDrawPrefix(int16_t yy) {
-  tft.setTextColor(C_GREEN); tft.setTextSize(1);
-  tft.setCursor(TERM_PAD_X, yy + 6);
-  tft.print("clawd:~$ ");
+  gfx->setTextColor(C_GREEN); gfx->setTextSize(1);
+  gfx->setCursor(TERM_PAD_X, yy + 6);
+  gfx->print("clawd:~$ ");
 }
 
-#define PREFIX_PX 54   // 9 chars × 6px = 54px at textSize 1
+#define PREFIX_PX 54
 
 void termDrawLine(uint8_t r) {
   const int16_t yy = TERM_PAD_Y + 4 + r * TERM_CHAR_H;
-  tft.fillRect(0, yy, DISP_W, TERM_CHAR_H, C_DARKBG);
-  // show prefix only on the currently active (cursor) line
+  gfx->fillRect(0, yy, DISP_W, TERM_CHAR_H, C_DARKBG);
   if (r == termRow) termDrawPrefix(yy);
-  tft.setTextColor(C_WHITE); tft.setTextSize(2);
-  tft.setCursor(TERM_PAD_X + PREFIX_PX, yy + 1);
-  tft.print(termLines[r]);
+  gfx->setTextColor(C_WHITE); gfx->setTextSize(2);
+  gfx->setCursor(TERM_PAD_X + PREFIX_PX, yy + 1);
+  gfx->print(termLines[r]);
   if (r == termRow) {
     const int16_t cx = TERM_PAD_X + PREFIX_PX + termCol * TERM_CHAR_W;
-    tft.fillRect(cx, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
+    gfx->fillRect(cx, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
   }
 }
 
@@ -345,30 +357,25 @@ void termDrawLastChar() {
   const int16_t yy    = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
   const int16_t baseX = TERM_PAD_X + PREFIX_PX;
   const uint8_t prev  = termCol - 1;
-  // erase prev cell (had cursor block)
-  tft.fillRect(baseX + prev * TERM_CHAR_W, yy + 1, TERM_CHAR_W, TERM_CHAR_H - 1, C_DARKBG);
-  tft.setTextColor(C_WHITE); tft.setTextSize(2);
-  tft.setCursor(baseX + prev * TERM_CHAR_W, yy + 1);
-  tft.print(termLines[termRow][prev]);
-  // new cursor
-  tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
+  gfx->fillRect(baseX + prev * TERM_CHAR_W, yy + 1, TERM_CHAR_W, TERM_CHAR_H - 1, C_DARKBG);
+  gfx->setTextColor(C_WHITE); gfx->setTextSize(2);
+  gfx->setCursor(baseX + prev * TERM_CHAR_W, yy + 1);
+  gfx->print(termLines[termRow][prev]);
+  gfx->fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
 }
 
 void termDrawBackspace() {
   const int16_t yy    = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
   const int16_t baseX = TERM_PAD_X + PREFIX_PX;
-  // erase deleted char + old cursor
-  tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W * 2, TERM_CHAR_H - 1, C_DARKBG);
-  // new cursor
-  tft.fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
-  // if line now empty, erase the prefix too
+  gfx->fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W * 2, TERM_CHAR_H - 1, C_DARKBG);
+  gfx->fillRect(baseX + termCol * TERM_CHAR_W, yy + 1, TERM_CHAR_W - 2, TERM_CHAR_H - 2, C_GREEN);
   if (termLines[termRow].length() == 0) {
-    tft.fillRect(0, yy, TERM_PAD_X + PREFIX_PX, TERM_CHAR_H, C_DARKBG);
+    gfx->fillRect(0, yy, TERM_PAD_X + PREFIX_PX, TERM_CHAR_H, C_DARKBG);
   }
 }
 
 void termFullRedraw() {
-  tft.fillScreen(C_DARKBG);
+  gfx->fillScreen(C_DARKBG);
   termDrawHeader();
   for (uint8_t r = 0; r < TERM_ROWS; r++) termDrawLine(r);
 }
@@ -383,12 +390,11 @@ void termScroll() {
 void termAddChar(char c) {
   if (c == '\n' || c == '\r') {
     const int16_t yy = TERM_PAD_Y + 4 + termRow * TERM_CHAR_H;
-    // erase cursor on current row
-    tft.fillRect(TERM_PAD_X + PREFIX_PX + termCol * TERM_CHAR_W,
+    gfx->fillRect(TERM_PAD_X + PREFIX_PX + termCol * TERM_CHAR_W,
                  yy + 1, TERM_CHAR_W, TERM_CHAR_H - 1, C_DARKBG);
     termRow++; termCol = 0;
     if (termRow >= TERM_ROWS) { termScroll(); return; }
-    termDrawLine(termRow);  // draws prefix on new line
+    termDrawLine(termRow);
   } else if (c == '\b' || c == 127) {
     if (termCol > 0) {
       termCol--;
@@ -400,7 +406,6 @@ void termAddChar(char c) {
       termRow++; termCol = 0;
       if (termRow >= TERM_ROWS) { termScroll(); return; }
     }
-    // draw prefix on first char of this line
     if (termCol == 0) termDrawPrefix(TERM_PAD_Y + 4 + termRow * TERM_CHAR_H);
     termLines[termRow] += c;
     termCol++;
@@ -435,14 +440,14 @@ void animSquishEyes() {
 
 void animLogoReveal() {
   busy = true;
-  tft.fillScreen(animBgColor);
+  gfx->fillScreen(animBgColor);
   for (uint16_t i = 0; i < LOGO_SEG_COUNT; i++) {
     int16_t x1 = pgm_read_word(&LOGO_SEGS[i][0]);
     int16_t y1 = pgm_read_word(&LOGO_SEGS[i][1]);
     int16_t x2 = pgm_read_word(&LOGO_SEGS[i][2]);
     int16_t y2 = pgm_read_word(&LOGO_SEGS[i][3]);
-    tft.drawLine(x1, y1, x2, y2, C_WHITE);
-    tft.drawLine(x1 + 1, y1, x2 + 1, y2, C_WHITE);
+    gfx->drawLine(x1, y1, x2, y2, C_WHITE);
+    gfx->drawLine(x1 + 1, y1, x2 + 1, y2, C_WHITE);
     if (i % 4 == 0) { server.handleClient(); delay(speedMs(8)); }
   }
   drawLogoFilled(animBgColor, C_WHITE);
@@ -474,7 +479,6 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
 .sec{width:100%;max-width:390px;font-size:10px;color:#8a8278;
   letter-spacing:2px;font-weight:bold;padding:0 2px}
 
-/* Busy bar */
 .busy{width:100%;max-width:390px;height:2px;background:#2e2a28;
   border-radius:1px;overflow:hidden;opacity:0;transition:opacity .2s}
 .busy.show{opacity:1}
@@ -482,7 +486,6 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
   animation:sl 1s linear infinite}
 @keyframes sl{0%{margin-left:-30%}100%{margin-left:100%}}
 
-/* Controls */
 .ctrl{display:flex;gap:8px;width:100%;max-width:390px}
 .cbtn{flex:1;background:#252428;border:1.5px solid #38343a;border-radius:10px;
   color:#b8b4ac;font-family:'Courier New',monospace;font-size:11px;font-weight:bold;
@@ -492,7 +495,6 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
 .cbtn.on{border-color:#c96a3e;color:#c96a3e;background:#201408}
 .cbtn.dim{border-color:#2e2a28;color:#4a4540}
 
-/* View grid */
 .vgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:390px}
 .vbtn{background:#252428;border:1.5px solid #38343a;border-radius:12px;
   color:#d8d4cc;font-family:'Courier New',monospace;
@@ -508,13 +510,11 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
 .vbtn[data-v="2"].active{border-color:#4a8acd;background:#0c1628}
 .vbtn[data-v="3"].active{border-color:#38343a;background:#201c18}
 
-/* Speed slider */
 .speed-row{width:100%;max-width:390px;display:flex;align-items:center;gap:10px}
 .sl{font-size:10px;color:#6a6058;white-space:nowrap;min-width:36px}
 input[type=range]{flex:1;accent-color:#c96a3e;cursor:pointer;height:20px}
 .sv{font-size:11px;color:#c96a3e;min-width:44px;text-align:right;font-weight:bold}
 
-/* Terminal */
 .twrap{width:100%;max-width:390px;display:none;flex-direction:column;gap:8px}
 .twrap.open{display:flex}
 .thdr{display:flex;justify-content:space-between;align-items:center}
@@ -533,7 +533,6 @@ input[type=range]{flex:1;accent-color:#c96a3e;cursor:pointer;height:20px}
   padding:11px 16px;cursor:pointer;min-width:52px}
 .tgo:active{background:#0f6040}
 
-/* Canvas */
 .cwrap{width:100%;max-width:390px;background:#222028;border:1.5px solid #38343a;
   border-radius:12px;padding:12px;flex-direction:column;gap:10px;display:none}
 .cwrap.open{display:flex}
@@ -550,7 +549,6 @@ input[type=range]{flex:1;accent-color:#c96a3e;cursor:pointer;height:20px}
 canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
   touch-action:none;cursor:crosshair;display:block}
 
-/* Toast */
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
   background:#252428;border:1.5px solid #38343a;border-radius:9px;
   font-size:12px;color:#d8d4cc;padding:7px 16px;opacity:0;
@@ -649,7 +647,6 @@ let tt;
 
 const spdLabels = ['','slow','normal','fast'];
 
-// ── Toast ──────────────────────────────────────────────────────
 function toast(msg, ok=true) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -659,13 +656,11 @@ function toast(msg, ok=true) {
   tt = setTimeout(() => el.classList.remove('show'), 1300);
 }
 
-// ── Busy ────────────────────────────────────────────────────────
 function setBusy(b) {
   isBusy = b;
   document.getElementById('busy').classList.toggle('show', b);
   const locked = b || termOpen;
   document.querySelectorAll('.vbtn').forEach(el => {
-    // when canvas open, keep canvas btn (data-v=3) active so user can exit
     el.disabled = canvasOpen ? parseInt(el.dataset.v) !== 3 : locked;
   });
   document.querySelectorAll('.lbtn').forEach(el => el.disabled = locked || canvasOpen);
@@ -674,7 +669,6 @@ function setBusy(b) {
   });
 }
 
-// ── HTTP ────────────────────────────────────────────────────────
 async function req(path) {
   try { const r = await fetch(path); return r.ok; }
   catch(e) { toast('no connection', false); return false; }
@@ -691,7 +685,6 @@ async function waitNotBusy() {
   }
 }
 
-// ── Background colour ───────────────────────────────────────────
 async function onBgChange(hex) {
   if (canvasOpen) {
     await req('/draw/clear?bg=' + encodeURIComponent(hex));
@@ -701,16 +694,14 @@ async function onBgChange(hex) {
   redrawCanvas(hex);
 }
 
-// ── Speed ───────────────────────────────────────────────────────
 async function setSpeed(v) {
   document.getElementById('spdV').textContent = spdLabels[v];
   await req('/speed?v=' + v);
 }
 
-// ── Views ───────────────────────────────────────────────────────
 async function setView(v) {
   if (isBusy || termOpen || canvasOpen) return;
-  if (v === 3) { toggleCanvas(); return; }  // canvas button in grid
+  if (v === 3) { toggleCanvas(); return; }
   const keys = ['w','s','d'];
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
@@ -719,7 +710,7 @@ async function setView(v) {
   if (v === 2) {
     termOpen = true;
     document.getElementById('twrap').classList.add('open');
-    setBusy(false);   // re-run to apply termOpen lock
+    setBusy(false);
     setBusy(false);
     document.querySelectorAll('.vbtn,.lbtn').forEach(b => b.disabled = true);
     const cvb = document.getElementById('cvBtn'); if (cvb) cvb.disabled = true;
@@ -732,9 +723,6 @@ async function setView(v) {
   setBusy(false);
 }
 
-// ── Logo animations (kept for startup, not exposed in UI) ──────
-
-// ── Backlight ───────────────────────────────────────────────────
 async function toggleBL() {
   blOn = !blOn;
   await req('/backlight?on=' + (blOn ? 1 : 0));
@@ -744,13 +732,11 @@ async function toggleBL() {
   b.classList.toggle('dim', !blOn);
 }
 
-// ── Canvas toggle ───────────────────────────────────────────────
 async function toggleCanvas() {
   canvasOpen = !canvasOpen;
   document.getElementById('cwrap').classList.toggle('open', canvasOpen);
   const b = document.getElementById('cvBtn');
   if (b) { b.classList.toggle('on', canvasOpen); b.textContent = canvasOpen ? '\u2b1b canvas on' : '\u2b1b canvas'; }
-  // highlight the canvas vbtn (data-v=3) in the grid
   document.querySelectorAll('.vbtn').forEach(btn =>
     btn.classList.toggle('active', canvasOpen && parseInt(btn.dataset.v) === 3));
   await req('/canvas?on=' + (canvasOpen ? 1 : 0));
@@ -758,16 +744,14 @@ async function toggleCanvas() {
     const bg = document.getElementById('bgCol').value;
     redrawCanvas(bg);
     await req('/draw/clear?bg=' + encodeURIComponent(bg));
-    // lock all other buttons
     document.querySelectorAll('.vbtn,.lbtn').forEach(b => b.disabled = true);
     toast('canvas active');
   } else {
-    setBusy(false);   // re-evaluate locks
+    setBusy(false);
     toast('canvas off');
   }
 }
 
-// ── Terminal ────────────────────────────────────────────────────
 const tin = document.getElementById('tin');
 let lastVal = '';
 tin.addEventListener('input', async () => {
@@ -794,7 +778,6 @@ async function closeTerm() {
   toast('terminal closed');
 }
 
-// ── Canvas drawing — send full stroke on finger lift ────────────
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
 let strokePts = [];
@@ -817,7 +800,6 @@ function startDraw(e) {
   strokePts = [];
   const p = getPos(e); lastX = p.x; lastY = p.y;
   strokePts.push({ x: Math.round(p.x), y: Math.round(p.y) });
-  // draw dot on canvas preview only — no display send yet
   ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
   ctx.fillStyle = document.getElementById('penCol').value; ctx.fill();
 }
@@ -847,7 +829,6 @@ cvs.addEventListener('touchstart', startDraw, {passive:false});
 cvs.addEventListener('touchmove',  moveDraw,  {passive:false});
 cvs.addEventListener('touchend',   endDraw);
 
-// Clear = clear both web canvas and display
 async function clearAll() {
   const bg = document.getElementById('bgCol').value;
   redrawCanvas(bg);
@@ -855,16 +836,13 @@ async function clearAll() {
   toast('cleared');
 }
 
-// Init: sync speed and backlight from ESP32, reset bg to default
 (async () => {
   try {
     const r = await fetch('/state');
     const j = await r.json();
-    // Sync speed
     const spd = j.speed || 1;
     document.getElementById('spd').value = spd;
     document.getElementById('spdV').textContent = spdLabels[spd];
-    // Sync backlight
     if (j.bl === false) {
       blOn = false;
       const b = document.getElementById('blBtn');
@@ -872,7 +850,6 @@ async function clearAll() {
       b.classList.remove('on'); b.classList.add('dim');
     }
   } catch(e) {}
-  // Always reset bg picker to default orange on page load
   document.getElementById('bgCol').value = '#aa4818';
   redrawCanvas('#aa4818');
 })();
@@ -928,7 +905,6 @@ void routeSpeed() {
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
-// /redraw?bg=hex — set animBg and immediately redraw current view
 void routeRedraw() {
   if (server.hasArg("bg")) {
     animBgColor = hexToRgb565(server.arg("bg"));
@@ -938,23 +914,23 @@ void routeRedraw() {
     case VIEW_EYES_NORMAL: drawNormalEyes(); break;
     case VIEW_EYES_SQUISH: drawSquishEyes(); break;
     case VIEW_CODE:        drawCodeView();   break;
-    case VIEW_DRAW:        tft.fillScreen(drawBgColor); break;
+    case VIEW_DRAW:        gfx->fillScreen(drawBgColor); break;
   }
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
 void routeCanvas() {
   const bool on = server.hasArg("on") && server.arg("on") == "1";
-  if (on) { currentView = VIEW_DRAW; tft.fillScreen(drawBgColor); }
+  if (on) { currentView = VIEW_DRAW; gfx->fillScreen(drawBgColor); }
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
 void routeDrawClear() {
   const String bg = server.hasArg("bg") ? server.arg("bg") : "#aa4818";
   drawBgColor = hexToRgb565(bg);
-  animBgColor = drawBgColor;  // keep in sync
+  animBgColor = drawBgColor;
   currentView = VIEW_DRAW; termMode = false;
-  tft.fillScreen(drawBgColor);
+  gfx->fillScreen(drawBgColor);
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
@@ -978,11 +954,11 @@ void routeDrawStroke() {
       const int16_t x = entry.substring(0, comma).toInt();
       const int16_t y = entry.substring(comma + 1).toInt();
       if (prev.x >= 0) {
-        tft.drawLine(prev.x, prev.y, x, y, color);
-        tft.drawLine(prev.x + 1, prev.y, x + 1, y, color);
-        tft.drawLine(prev.x, prev.y + 1, x, y + 1, color);
+        gfx->drawLine(prev.x, prev.y, x, y, color);
+        gfx->drawLine(prev.x + 1, prev.y, x + 1, y, color);
+        gfx->drawLine(prev.x, prev.y + 1, x, y + 1, color);
       } else {
-        tft.fillCircle(x, y, 2, color);
+        gfx->fillCircle(x, y, 2, color);
       }
       prev = {x, y};
     }
@@ -996,7 +972,6 @@ void routeBacklight() {
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
-// Convert RGB565 back to #RRGGBB for state endpoint
 String rgb565ToHex(uint16_t c) {
   uint8_t r = ((c >> 11) & 0x1F) << 3;
   uint8_t g = ((c >> 5)  & 0x3F) << 2;
@@ -1025,44 +1000,44 @@ void routeNotFound() { server.send(404, "text/plain", "not found"); }
 void setup() {
   Serial.begin(115200);
 
-  pinMode(TFT_BLK, OUTPUT);
+  // PWM backlight init
+  ledcAttach(TFT_BLK, PWM_FREQ, PWM_RES);
   setBacklight(true);
 
-  SPI.begin(8, -1, 10, TFT_CS);   // SCK=8, MOSI=10
-  tft.init(240, 240);
-  tft.setSPISpeed(40000000);
-  tft.setRotation(1);
+  // Init display
+  gfx->begin();
+  gfx->setRotation(1);
   initColours();
 
-  // ── Boot splash ────────────────────────────────────────────
-  tft.fillScreen(animBgColor);
-  tft.setTextColor(C_WHITE); tft.setTextSize(3);
-  tft.setCursor(DISP_W / 2 - 54, DISP_H / 2 - 22); tft.print("Clawd");
-  tft.setCursor(DISP_W / 2 - 54, DISP_H / 2 + 14); tft.print("Mochi");
+  // Boot splash
+  gfx->fillScreen(animBgColor);
+  gfx->setTextColor(C_WHITE); gfx->setTextSize(3);
+  gfx->setCursor(DISP_W / 2 - 54, DISP_H / 2 - 22); gfx->print("Clawd");
+  gfx->setCursor(DISP_W / 2 - 54, DISP_H / 2 + 14); gfx->print("Mochi");
   delay(1200);
 
-  // ── Logo shown once at startup ─────────────────────────────
+  // Logo reveal
   animLogoReveal();
 
-  // ── Start WiFi ─────────────────────────────────────────────
+  // Start WiFi
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID, AP_PASS);
 
-  // ── WiFi info screen (stays until first web request) ───────
-  tft.fillScreen(C_DARKBG);
-  tft.fillRect(0, 0, DISP_W, 4, C_ORANGE);
-  tft.setTextColor(C_WHITE);  tft.setTextSize(2);
-  tft.setCursor(12, 16);  tft.print("WiFi: ClaWD-Mochi");
-  tft.setTextColor(C_MUTED);  tft.setTextSize(1);
-  tft.setCursor(12, 44);  tft.print("password: clawd1234");
-  tft.setTextColor(C_WHITE);  tft.setTextSize(2);
-  tft.setCursor(12, 68);  tft.print("Open browser:");
-  tft.setTextColor(C_ORANGE); tft.setTextSize(2);
-  tft.setCursor(12, 94);  tft.print("192.168.4.1");
-  tft.setTextColor(C_MUTED);  tft.setTextSize(1);
-  tft.setCursor(12, 124); tft.print("press any button to start");
+  // WiFi info screen
+  gfx->fillScreen(C_DARKBG);
+  gfx->fillRect(0, 0, DISP_W, 4, C_ORANGE);
+  gfx->setTextColor(C_WHITE);  gfx->setTextSize(2);
+  gfx->setCursor(12, 16);  gfx->print("WiFi: ClaWD-Mochi");
+  gfx->setTextColor(C_MUTED);  gfx->setTextSize(1);
+  gfx->setCursor(12, 44);  gfx->print("password: clawd1234");
+  gfx->setTextColor(C_WHITE);  gfx->setTextSize(2);
+  gfx->setCursor(12, 68);  gfx->print("Open browser:");
+  gfx->setTextColor(C_ORANGE); gfx->setTextSize(2);
+  gfx->setCursor(12, 94);  gfx->print("192.168.4.1");
+  gfx->setTextColor(C_MUTED);  gfx->setTextSize(1);
+  gfx->setCursor(12, 124); gfx->print("press any button to start");
 
-  // ── Register routes ────────────────────────────────────────
+  // Register routes
   server.on("/",            HTTP_GET, routeRoot);
   server.on("/cmd",         HTTP_GET, routeCmd);
   server.on("/char",        HTTP_GET, routeChar);
@@ -1075,9 +1050,6 @@ void setup() {
   server.on("/state",       HTTP_GET, routeState);
   server.onNotFound(routeNotFound);
   server.begin();
-
-  // WiFi info stays on screen — first button press triggers setView/cmd
-  // which will replace it with the correct view
 }
 
 // ═════════════════════════════════════════════════════════════
