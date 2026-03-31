@@ -188,8 +188,8 @@ static void idleSquishSleep() {
 // ═════════════════════════════════════════════════════════════
 
 void loopIdle() {
-  // Only run for eye views, and not when busy or in terminal
-  if (busy || termMode) return;
+  // Only run for eye views, and not when busy
+  if (busy) return;
   if (currentView != VIEW_EYES_NORMAL && currentView != VIEW_EYES_SQUISH) return;
 
   // Wait for idle threshold

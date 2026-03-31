@@ -62,13 +62,7 @@ bool     backlightOn  = true;
 uint8_t  animSpeed    = 1;
 uint16_t animBgColor  = 0;
 uint16_t drawBgColor  = 0;
-bool     termMode     = false;
 unsigned long lastInteractionMs = 0;
-
-// ── Terminal state ────────────────────────────────────────────
-String  termLines[TERM_ROWS];
-uint8_t termRow = 0;
-uint8_t termCol = 0;
 
 // ═════════════════════════════════════════════════════════════
 //  SETUP
@@ -85,6 +79,7 @@ void setup() {
   gfx->begin();
   gfx->setRotation(1);
   initColours();
+  loadSettings();
 
   // Boot splash + logo reveal
   bootSplash();
@@ -96,8 +91,17 @@ void setup() {
   registerRoutes();
   server.begin();
 
-  // Draw initial view so screen is ready before idle animations
-  drawNormalEyes();
+  // Restore last view
+  if (currentView == VIEW_DRAW) {
+    gfx->fillScreen(drawBgColor);
+  } else if (currentView == VIEW_EYES_SQUISH) {
+    drawSquishEyes();
+  } else if (currentView == VIEW_WEATHER) {
+    drawWeatherView();
+  } else {
+    currentView = VIEW_EYES_NORMAL;
+    drawNormalEyes();
+  }
   lastInteractionMs = millis();
 }
 

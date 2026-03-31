@@ -24,9 +24,16 @@ String rgb565ToHex(uint16_t c) {
   return String(buf);
 }
 
+uint8_t brightness = 255;
+
 void setBacklight(bool on) {
   backlightOn = on;
-  ledcWrite(TFT_BLK, on ? 255 : 0);
+  ledcWrite(TFT_BLK, on ? brightness : 0);
+}
+
+void setBrightness(uint8_t val) {
+  brightness = val;
+  if (backlightOn) ledcWrite(TFT_BLK, brightness);
 }
 
 void initColours() {
@@ -36,4 +43,26 @@ void initColours() {
   C_GREEN  = gfx->color565(80,  220, 130);
   animBgColor = C_ORANGE;
   drawBgColor = C_ORANGE;
+}
+
+// ── Settings persistence (NVS) ───────────────────────────────
+
+void saveSettings() {
+  Preferences p;
+  p.begin("clawd", false);
+  p.putUShort("bg_color", animBgColor);
+  p.putUShort("pen_color", drawBgColor);
+  p.putUChar("last_view", currentView);
+  p.putUChar("brightness", brightness);
+  p.end();
+}
+
+void loadSettings() {
+  Preferences p;
+  p.begin("clawd", true);
+  animBgColor  = p.getUShort("bg_color", C_ORANGE);
+  drawBgColor  = p.getUShort("pen_color", C_ORANGE);
+  currentView  = p.getUChar("last_view", VIEW_EYES_NORMAL);
+  brightness   = p.getUChar("brightness", 255);
+  p.end();
 }

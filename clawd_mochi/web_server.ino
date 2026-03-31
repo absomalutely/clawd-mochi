@@ -15,36 +15,21 @@ void routeCmd() {
   }
   const char c = server.arg("k")[0];
 
-  if (termMode) {
-    if (c == 'q') { termMode = false; drawCodeView(); }
-    server.send(200, "application/json", "{\"ok\":1}"); return;
-  }
-
   server.send(200, "application/json", "{\"ok\":1}");
   switch (c) {
     case 'w': currentView = VIEW_EYES_NORMAL; animNormalEyes(); break;
     case 's': currentView = VIEW_EYES_SQUISH; animSquishEyes(); break;
-    case 'd':
-      currentView = VIEW_CODE; drawCodeView();
-      termMode = true; termClear(); termFullRedraw(); break;
     case 'a':
       currentView = VIEW_EYES_NORMAL;
       animLogoReveal();
       break;
     case 'x':
       currentView = VIEW_WEATHER;
-      wxValid = false;  // force refresh
+      wxValid = false;
       drawWeatherView();
       break;
   }
-}
-
-void routeChar() {
-  lastInteractionMs = millis();
-  if (!termMode) { server.send(200, "application/json", "{\"ok\":1}"); return; }
-  const String val = server.arg("c");
-  if (val.length() > 0) termAddChar(val[0]);
-  server.send(200, "application/json", "{\"ok\":1}");
+  saveSettings();
 }
 
 void routeSpeed() {
@@ -57,12 +42,11 @@ void routeRedraw() {
   lastInteractionMs = millis();
   if (server.hasArg("bg")) {
     animBgColor = hexToRgb565(server.arg("bg"));
-    drawBgColor = animBgColor;
+    saveSettings();
   }
   switch (currentView) {
     case VIEW_EYES_NORMAL: drawNormalEyes(); break;
     case VIEW_EYES_SQUISH: drawSquishEyes(); break;
-    case VIEW_CODE:        drawCodeView();   break;
     case VIEW_DRAW:        gfx->fillScreen(drawBgColor); break;
   }
   server.send(200, "application/json", "{\"ok\":1}");
@@ -71,7 +55,11 @@ void routeRedraw() {
 void routeCanvas() {
   lastInteractionMs = millis();
   const bool on = server.hasArg("on") && server.arg("on") == "1";
-  if (on) { currentView = VIEW_DRAW; gfx->fillScreen(drawBgColor); }
+  if (on) {
+    currentView = VIEW_DRAW;
+    canvasClear(drawBgColor);
+    saveSettings();
+  }
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
@@ -79,9 +67,8 @@ void routeDrawClear() {
   lastInteractionMs = millis();
   const String bg = server.hasArg("bg") ? server.arg("bg") : "#aa4818";
   drawBgColor = hexToRgb565(bg);
-  animBgColor = drawBgColor;
-  currentView = VIEW_DRAW; termMode = false;
-  gfx->fillScreen(drawBgColor);
+  currentView = VIEW_DRAW;
+  canvasClear(drawBgColor);
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
@@ -91,48 +78,37 @@ void routeDrawStroke() {
     server.send(200, "application/json", "{\"ok\":1}"); return;
   }
   const uint16_t color = hexToRgb565(server.arg("pen"));
+  drawBgColor = color;  // persist pen colour
   const String   data  = server.arg("pts");
+  const uint8_t  sz    = server.hasArg("sz") ? constrain(server.arg("sz").toInt(), 1, 20) : 8;
   currentView = VIEW_DRAW;
-
-  struct Pt { int16_t x, y; };
-  Pt prev = {-1, -1};
-  int start = 0;
-  while (start < (int)data.length()) {
-    int semi = data.indexOf(';', start);
-    if (semi == -1) semi = data.length();
-    String entry = data.substring(start, semi);
-    const int comma = entry.indexOf(',');
-    if (comma > 0) {
-      const int16_t x = entry.substring(0, comma).toInt();
-      const int16_t y = entry.substring(comma + 1).toInt();
-      if (prev.x >= 0) {
-        gfx->drawLine(prev.x, prev.y, x, y, color);
-        gfx->drawLine(prev.x + 1, prev.y, x + 1, y, color);
-        gfx->drawLine(prev.x, prev.y + 1, x, y + 1, color);
-      } else {
-        gfx->fillCircle(x, y, 2, color);
-      }
-      prev = {x, y};
-    }
-    start = semi + 1;
-  }
+  canvasDrawStroke(data, color, sz);
+  saveSettings();
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
 void routeBacklight() {
   lastInteractionMs = millis();
-  setBacklight(server.hasArg("on") && server.arg("on") == "1");
+  if (server.hasArg("bri")) {
+    setBrightness(constrain(server.arg("bri").toInt(), 10, 255));
+    saveSettings();
+  }
+  if (server.hasArg("on")) {
+    setBacklight(server.arg("on") == "1");
+  }
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
 void routeState() {
   String j = "{\"view\":"; j += currentView;
   j += ",\"busy\":";   j += busy        ? "true" : "false";
-  j += ",\"term\":";   j += termMode    ? "true" : "false";
   j += ",\"bl\":";     j += backlightOn ? "true" : "false";
+  j += ",\"bri\":";    j += brightness;
   j += ",\"speed\":";  j += animSpeed;
   j += ",\"sta\":";    j += wifiIsStaConnected() ? "true" : "false";
   j += ",\"sta_ip\":\""; j += staIP; j += "\"";
+  j += ",\"bg\":\"";  j += rgb565ToHex(animBgColor); j += "\"";
+  j += ",\"pen\":\""; j += rgb565ToHex(drawBgColor); j += "\"";
   j += "}";
   server.send(200, "application/json", j);
 }
@@ -201,6 +177,23 @@ void routeWeatherConfig() {
   server.send(200, "application/json", j);
 }
 
+void routeAPConfig() {
+  lastInteractionMs = millis();
+  if (server.hasArg("ssid")) {
+    String ssid = server.arg("ssid");
+    String pass = server.hasArg("pass") ? server.arg("pass") : "";
+    if (ssid.length() == 0) {
+      server.send(400, "application/json", "{\"e\":\"no ssid\"}"); return;
+    }
+    wifiSaveAPConfig(ssid, pass);
+    server.send(200, "application/json", "{\"ok\":1,\"msg\":\"saved, reboot to apply\"}");
+    return;
+  }
+  String j = "{\"ssid\":\""; j += apSSID;
+  j += "\"}";
+  server.send(200, "application/json", j);
+}
+
 void routeNotFound() { server.send(404, "text/plain", "not found"); }
 
 // ── Route registration ───────────────────────────────────────
@@ -208,7 +201,6 @@ void routeNotFound() { server.send(404, "text/plain", "not found"); }
 void registerRoutes() {
   server.on("/",            HTTP_GET, routeRoot);
   server.on("/cmd",         HTTP_GET, routeCmd);
-  server.on("/char",        HTTP_GET, routeChar);
   server.on("/speed",       HTTP_GET, routeSpeed);
   server.on("/redraw",      HTTP_GET, routeRedraw);
   server.on("/canvas",      HTTP_GET, routeCanvas);
@@ -218,6 +210,7 @@ void registerRoutes() {
   server.on("/state",       HTTP_GET, routeState);
   server.on("/ticker",      HTTP_GET, routeTicker);
   server.on("/config/wifi",    HTTP_ANY, routeWifiConfig);
+  server.on("/config/ap",      HTTP_ANY, routeAPConfig);
   server.on("/config/weather", HTTP_ANY, routeWeatherConfig);
   server.onNotFound(routeNotFound);
 }

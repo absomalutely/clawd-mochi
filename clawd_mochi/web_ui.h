@@ -12,7 +12,7 @@ const char INDEX_HTML[] PROGMEM = R"rawhtml(
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
   display:flex;flex-direction:column;align-items:center;
-  padding:20px 14px 52px;gap:14px;min-height:100vh}
+  padding:20px 14px 52px;gap:14px;min-height:100vh;position:relative}
 
 .hdr{text-align:center;padding:2px 0 4px}
 .mascot{font-size:15px;color:#c96a3e;line-height:1.3;font-weight:bold;
@@ -50,7 +50,6 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
 .vbtn .ht{font-size:9px;color:#8a8278;margin-top:3px}
 .vbtn.active{border-color:#c96a3e;background:#201408}
 .vbtn[data-v="1"].active{border-color:#c96a3e;background:#201408}
-.vbtn[data-v="2"].active{border-color:#4a8acd;background:#0c1628}
 .vbtn[data-v="3"].active{border-color:#38343a;background:#201c18}
 .vbtn[data-v="5"].active{border-color:#ffcc33;background:#181408}
 
@@ -98,9 +97,22 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
   font-size:12px;color:#d8d4cc;padding:7px 16px;opacity:0;
   transition:opacity .18s;pointer-events:none;white-space:nowrap;z-index:99}
 .toast.show{opacity:1}
+
+.cog-btn{position:fixed;top:14px;right:14px;background:#252428;border:1.5px solid #38343a;
+  border-radius:50%;width:38px;height:38px;cursor:pointer;z-index:50;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:#8a8278;transition:all .2s}
+.cog-btn:active{transform:scale(.9)}
+.cog-btn.open{color:#c96a3e;border-color:#c96a3e;transform:rotate(90deg)}
+
+.settings-panel{width:100%;max-width:390px;display:none;flex-direction:column;gap:14px;
+  background:#1a1a1e;border:1.5px solid #38343a;border-radius:12px;padding:14px}
+.settings-panel.open{display:flex}
 </style>
 </head>
 <body>
+
+<button class="cog-btn" id="cogBtn" onclick="toggleSettings()">&#9881;</button>
 
 <div class="hdr">
   <span class="mascot">&#x2590;&#x259B;&#x2588;&#x2588;&#x2588;&#x259C;&#x258C;<br>&#x259C;&#x2588;&#x2588;&#x2588;&#x2588;&#x2588;&#x259B;<br>&#x2598;&#x2598;&nbsp;&#x259D;&#x259D;</span>
@@ -112,6 +124,11 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
 <div class="sec">// controls</div>
 <div class="ctrl">
   <button class="cbtn on" id="blBtn" onclick="toggleBL()">&#9728; display on</button>
+</div>
+<div class="speed-row">
+  <span class="sl">dim</span>
+  <input type="range" id="bri" min="10" max="255" value="255" step="5" oninput="setBri(this.value)">
+  <span class="sl">bright</span>
 </div>
 
 <div class="sec">// views</div>
@@ -125,11 +142,6 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="ic">&gt; &lt;</span>
     <span class="nm">Squish eyes</span>
     <span class="ht">open / close</span>
-  </button>
-  <button class="vbtn" data-v="2" onclick="setView(2)">
-    <span class="ic">{ }</span>
-    <span class="nm">Claude Code</span>
-    <span class="ht">opens terminal</span>
   </button>
   <button class="vbtn" data-v="3" onclick="toggleCanvas()">
     <span class="ic">&#11035;</span>
@@ -161,23 +173,15 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
   </div>
 </div>
 
-<div class="sec">// terminal</div>
-<div class="twrap" id="twrap">
-  <div class="thdr">
-    <span class="tttl">&#9658; clawd:~$</span>
-    <button class="tx" onclick="closeTerm()">&#x2715; exit terminal</button>
-  </div>
-  <div class="trow">
-    <input class="tin" id="tin" type="text" placeholder="type here..."
-           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-    <button class="tgo" onclick="termEnter()">&#8629;</button>
-  </div>
-</div>
-
 <div class="cwrap" id="cwrap">
   <div class="dacts">
     <button class="db hi" onclick="clearAll()">&#11035; clear</button>
     <button class="db" style="border-color:#28b878;color:#28b878" onclick="toggleCanvas()">&#10003; done</button>
+  </div>
+  <div class="speed-row" style="max-width:100%">
+    <span class="sl">thin</span>
+    <input type="range" id="penSize" min="1" max="20" value="8" step="1">
+    <span class="sl">thick</span>
   </div>
   <canvas id="cvs" width="240" height="240"></canvas>
 </div>
@@ -207,44 +211,65 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
   </div>
 </div>
 
-<div class="sec">// wifi settings</div>
-<div class="twrap open" id="wfwrap">
-  <div class="thdr">
-    <span class="tttl" style="color:#4a8acd">&#8801; home wifi</span>
-    <span id="wfStatus" style="font-size:10px;color:#5a5048">...</span>
+<div class="settings-panel" id="settingsPanel">
+  <div class="sec" style="padding:0">// device hotspot</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div class="thdr">
+      <span class="tttl" style="color:#c96a3e">&#9881; mochi AP</span>
+      <span id="apStatus" style="font-size:10px;color:#5a5048">...</span>
+    </div>
+    <div class="trow">
+      <input class="tin" id="apSSID" type="text" placeholder="hotspot name"
+             style="border-color:#3a2418;color:#c96a3e;background:#1c0e08"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="trow">
+      <input class="tin" id="apPass" type="password" placeholder="password"
+             style="border-color:#3a2418;color:#c96a3e;background:#1c0e08"
+             autocomplete="off">
+      <button class="tgo" style="background:#c96a3e" onclick="saveAP()">&#10003;</button>
+    </div>
   </div>
-  <div class="trow">
-    <input class="tin" id="wfSSID" type="text" placeholder="SSID"
-           style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
-           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-  </div>
-  <div class="trow">
-    <input class="tin" id="wfPass" type="password" placeholder="password"
-           style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
-           autocomplete="off">
-    <button class="tgo" style="background:#4a8acd" onclick="saveWifi()">&#10003;</button>
-  </div>
-</div>
 
-<div class="sec">// weather config</div>
-<div class="twrap open" id="wxwrap">
-  <div class="thdr">
-    <span class="tttl" style="color:#ffcc33">&#9729; openweathermap</span>
-    <span id="wxStatus" style="font-size:10px;color:#5a5048">...</span>
+  <div class="sec" style="padding:0">// home wifi</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div class="thdr">
+      <span class="tttl" style="color:#4a8acd">&#8801; home wifi</span>
+      <span id="wfStatus" style="font-size:10px;color:#5a5048">...</span>
+    </div>
+    <div class="trow">
+      <input class="tin" id="wfSSID" type="text" placeholder="SSID"
+             style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="trow">
+      <input class="tin" id="wfPass" type="password" placeholder="password"
+             style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
+             autocomplete="off">
+      <button class="tgo" style="background:#4a8acd" onclick="saveWifi()">&#10003;</button>
+    </div>
   </div>
-  <div class="trow">
-    <input class="tin" id="wxKey" type="password" placeholder="API key"
-           style="border-color:#38301a;color:#ffcc33;background:#181408"
-           autocomplete="off">
-  </div>
-  <div class="trow">
-    <input class="tin" id="wxLat" type="text" placeholder="latitude"
-           style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
-           autocomplete="off">
-    <input class="tin" id="wxLon" type="text" placeholder="longitude"
-           style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
-           autocomplete="off">
-    <button class="tgo" style="background:#cc9a20" onclick="saveWeather()">&#10003;</button>
+
+  <div class="sec" style="padding:0">// weather config</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div class="thdr">
+      <span class="tttl" style="color:#ffcc33">&#9729; openweathermap</span>
+      <span id="wxStatus" style="font-size:10px;color:#5a5048">...</span>
+    </div>
+    <div class="trow">
+      <input class="tin" id="wxKey" type="password" placeholder="API key"
+             style="border-color:#38301a;color:#ffcc33;background:#181408"
+             autocomplete="off">
+    </div>
+    <div class="trow">
+      <input class="tin" id="wxLat" type="text" placeholder="latitude"
+             style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
+             autocomplete="off">
+      <input class="tin" id="wxLon" type="text" placeholder="longitude"
+             style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
+             autocomplete="off">
+      <button class="tgo" style="background:#cc9a20" onclick="saveWeather()">&#10003;</button>
+    </div>
   </div>
 </div>
 
@@ -252,7 +277,6 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
 
 <script>
 let activeView  = 0;
-let termOpen    = false;
 let canvasOpen  = false;
 let blOn        = true;
 let isBusy      = false;
@@ -274,13 +298,11 @@ function toast(msg, ok=true) {
 function setBusy(b) {
   isBusy = b;
   document.getElementById('busy').classList.toggle('show', b);
-  const locked = b || termOpen;
   document.querySelectorAll('.vbtn').forEach(el => {
-    el.disabled = canvasOpen ? parseInt(el.dataset.v) !== 3 : locked;
+    el.disabled = canvasOpen ? parseInt(el.dataset.v) !== 3 : b;
   });
-  document.querySelectorAll('.lbtn').forEach(el => el.disabled = locked || canvasOpen);
   document.querySelectorAll('.cbtn').forEach(el => {
-    if (el.id !== 'blBtn') el.disabled = locked;
+    if (el.id !== 'blBtn') el.disabled = b;
   });
 }
 
@@ -315,27 +337,20 @@ async function setSpeed(v) {
 }
 
 async function setView(v) {
-  if (isBusy || termOpen || canvasOpen) return;
+  if (isBusy || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }
-  const keys = {0:'w', 1:'s', 2:'d', 5:'x'};
+  const keys = {0:'w', 1:'s', 5:'x'};
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
   document.querySelectorAll('.vbtn').forEach(b =>
     b.classList.toggle('active', parseInt(b.dataset.v) === v));
-  if (v === 2) {
-    termOpen = true;
-    document.getElementById('twrap').classList.add('open');
-    setBusy(false);
-    setBusy(false);
-    document.querySelectorAll('.vbtn,.lbtn').forEach(b => b.disabled = true);
-    const cvb = document.getElementById('cvBtn'); if (cvb) cvb.disabled = true;
-    document.getElementById('tin').focus();
-    toast('terminal open');
-    return;
-  }
   setBusy(true);
   await waitNotBusy();
   setBusy(false);
+}
+
+async function setBri(v) {
+  await req('/backlight?bri=' + v);
 }
 
 async function toggleBL() {
@@ -350,8 +365,6 @@ async function toggleBL() {
 async function toggleCanvas() {
   canvasOpen = !canvasOpen;
   document.getElementById('cwrap').classList.toggle('open', canvasOpen);
-  const b = document.getElementById('cvBtn');
-  if (b) { b.classList.toggle('on', canvasOpen); b.textContent = canvasOpen ? '\u2b1b canvas on' : '\u2b1b canvas'; }
   document.querySelectorAll('.vbtn').forEach(btn =>
     btn.classList.toggle('active', canvasOpen && parseInt(btn.dataset.v) === 3));
   await req('/canvas?on=' + (canvasOpen ? 1 : 0));
@@ -359,7 +372,7 @@ async function toggleCanvas() {
     const bg = document.getElementById('bgCol').value;
     redrawCanvas(bg);
     await req('/draw/clear?bg=' + encodeURIComponent(bg));
-    document.querySelectorAll('.vbtn,.lbtn').forEach(b => b.disabled = true);
+    document.querySelectorAll('.vbtn').forEach(b => b.disabled = true);
     toast('canvas active');
   } else {
     setBusy(false);
@@ -367,35 +380,18 @@ async function toggleCanvas() {
   }
 }
 
-const tin = document.getElementById('tin');
-let lastVal = '';
-tin.addEventListener('input', async () => {
-  const cur = tin.value, prev = lastVal;
-  if (cur.length > prev.length) {
-    await req('/char?c=' + encodeURIComponent(cur[cur.length - 1]));
-  } else if (cur.length < prev.length) {
-    await req('/char?c=%08');
-  }
-  lastVal = cur;
-});
-async function termEnter() {
-  await req('/char?c=%0A');
-  tin.value = ''; lastVal = ''; tin.focus();
-}
-tin.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); termEnter(); }
-});
-async function closeTerm() {
-  await req('/cmd?k=q');
-  termOpen = false;
-  document.getElementById('twrap').classList.remove('open');
-  setBusy(false);
-  toast('terminal closed');
+function toggleSettings() {
+  const panel = document.getElementById('settingsPanel');
+  const btn = document.getElementById('cogBtn');
+  panel.classList.toggle('open');
+  btn.classList.toggle('open');
 }
 
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
 let strokePts = [];
+
+function getPenSize() { return parseInt(document.getElementById('penSize').value); }
 
 function getPos(e) {
   const r = cvs.getBoundingClientRect();
@@ -415,15 +411,17 @@ function startDraw(e) {
   strokePts = [];
   const p = getPos(e); lastX = p.x; lastY = p.y;
   strokePts.push({ x: Math.round(p.x), y: Math.round(p.y) });
-  ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+  const sz = getPenSize();
+  ctx.beginPath(); ctx.arc(p.x, p.y, sz/2, 0, Math.PI * 2);
   ctx.fillStyle = document.getElementById('penCol').value; ctx.fill();
 }
 function moveDraw(e) {
   if (!drawing) return; e.preventDefault();
   const p = getPos(e);
+  const sz = getPenSize();
   ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y);
   ctx.strokeStyle = document.getElementById('penCol').value;
-  ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.lineWidth = sz; ctx.lineCap = 'round'; ctx.stroke();
   strokePts.push({ x: Math.round(p.x), y: Math.round(p.y) });
   lastX = p.x; lastY = p.y;
 }
@@ -431,8 +429,9 @@ async function endDraw(e) {
   if (!drawing) return; drawing = false;
   if (!canvasOpen || strokePts.length < 1) return;
   const pen = document.getElementById('penCol').value.replace('#', '');
+  const sz = getPenSize();
   const pts = strokePts.map(p => p.x + ',' + p.y).join(';');
-  await req('/draw/stroke?pen=' + pen + '&pts=' + encodeURIComponent(pts));
+  await req('/draw/stroke?pen=' + pen + '&sz=' + sz + '&pts=' + encodeURIComponent(pts));
   strokePts = [];
 }
 
@@ -488,6 +487,23 @@ async function checkWifiStatus() {
   } catch(e) {}
 }
 
+async function saveAP() {
+  const ssid = document.getElementById('apSSID').value.trim();
+  const pass = document.getElementById('apPass').value;
+  if (!ssid) { toast('enter hotspot name', false); return; }
+  if (!await req('/config/ap?ssid=' + encodeURIComponent(ssid) + '&pass=' + encodeURIComponent(pass))) return;
+  toast('saved — reboot to apply');
+}
+async function checkAPStatus() {
+  try {
+    const r = await fetch('/config/ap');
+    const j = await r.json();
+    const el = document.getElementById('apStatus');
+    el.textContent = j.ssid;
+    el.style.color = '#c96a3e';
+  } catch(e) {}
+}
+
 async function saveWeather() {
   const key = document.getElementById('wxKey').value.trim();
   const lat = document.getElementById('wxLat').value.trim();
@@ -539,9 +555,13 @@ async function clearAll() {
       b.textContent = '\u25cb display off';
       b.classList.remove('on'); b.classList.add('dim');
     }
+    if (j.bri) document.getElementById('bri').value = j.bri;
+    if (j.bg) document.getElementById('bgCol').value = j.bg;
+    if (j.pen) document.getElementById('penCol').value = j.pen;
   } catch(e) {}
-  document.getElementById('bgCol').value = '#aa4818';
-  redrawCanvas('#aa4818');
+  const bg = document.getElementById('bgCol').value;
+  redrawCanvas(bg);
+  checkAPStatus();
   checkWifiStatus();
   checkWeatherStatus();
 })();

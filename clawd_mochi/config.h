@@ -20,19 +20,9 @@
 #define EYE_OX  0
 #define EYE_OY  40
 
-// ── Terminal ──────────────────────────────────────────────────
-#define TERM_COLS      15
-#define TERM_ROWS       8
-#define TERM_CHAR_W    12
-#define TERM_CHAR_H    20
-#define TERM_PAD_X      8
-#define TERM_PAD_Y     18
-#define PREFIX_PX      54
-
 // ── Views ─────────────────────────────────────────────────────
 #define VIEW_EYES_NORMAL 0
 #define VIEW_EYES_SQUISH 1
-#define VIEW_CODE        2
 #define VIEW_DRAW        3
 #define VIEW_TICKER      4
 #define VIEW_WEATHER     5

@@ -14,15 +14,12 @@ extern bool     backlightOn;
 extern uint8_t  animSpeed;
 extern uint16_t animBgColor;
 extern uint16_t drawBgColor;
-extern bool     termMode;
 extern unsigned long lastInteractionMs;
-
-// ── Terminal state ────────────────────────────────────────────
-extern String  termLines[];
-extern uint8_t termRow;
-extern uint8_t termCol;
+extern uint8_t brightness;
 
 // ── WiFi state ────────────────────────────────────────────────
+extern String apSSID;
+extern String apPass;
 extern bool   staConnected;
 extern String staSSID;
 extern String staIP;
