@@ -130,6 +130,32 @@ void routeState() {
   server.send(200, "application/json", j);
 }
 
+void routeTicker() {
+  lastInteractionMs = millis();
+
+  // Stop ticker
+  if (server.hasArg("action") && server.arg("action") == "stop") {
+    tickerReturnToEyes();
+    server.send(200, "application/json", "{\"ok\":1}");
+    return;
+  }
+
+  // Update bg/pen colours if provided
+  if (server.hasArg("bg"))  animBgColor = hexToRgb565(server.arg("bg"));
+  if (server.hasArg("pen")) drawBgColor = hexToRgb565(server.arg("pen"));
+
+  // Start ticker
+  String text = server.hasArg("text") ? server.arg("text") : "";
+  if (text.length() == 0) {
+    server.send(400, "application/json", "{\"e\":\"no text\"}"); return;
+  }
+  uint8_t speed    = server.hasArg("speed") ? constrain(server.arg("speed").toInt(), 1, 5) : 2;
+  uint8_t textSize = server.hasArg("size")  ? constrain(server.arg("size").toInt(), 1, 5)  : 3;
+
+  tickerStart(text, speed, textSize);
+  server.send(200, "application/json", "{\"ok\":1}");
+}
+
 void routeNotFound() { server.send(404, "text/plain", "not found"); }
 
 // ── Route registration ───────────────────────────────────────
@@ -145,5 +171,6 @@ void registerRoutes() {
   server.on("/draw/stroke", HTTP_GET, routeDrawStroke);
   server.on("/backlight",   HTTP_GET, routeBacklight);
   server.on("/state",       HTTP_GET, routeState);
+  server.on("/ticker",      HTTP_GET, routeTicker);
   server.onNotFound(routeNotFound);
 }

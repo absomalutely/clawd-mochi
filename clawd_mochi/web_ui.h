@@ -176,6 +176,31 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
   <canvas id="cvs" width="240" height="240"></canvas>
 </div>
 
+<div class="sec">// ticker</div>
+<div class="twrap open" id="tkwrap">
+  <div class="thdr">
+    <span class="tttl" style="color:#c96a3e">&#9654; scrolling ticker</span>
+    <button class="tx" style="background:#1c0e08;border-color:#3a2418;color:#c96a3e"
+            onclick="stopTicker()">&#x2715; stop</button>
+  </div>
+  <div class="trow">
+    <input class="tin" id="tkText" type="text" placeholder="enter message..."
+           style="border-color:#3a2418;color:#c96a3e;background:#1c0e08"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button class="tgo" style="background:#c96a3e" onclick="sendTicker()">&#9654;</button>
+  </div>
+  <div class="speed-row" style="max-width:100%">
+    <span class="sl">slow</span>
+    <input type="range" id="tkSpd" min="1" max="5" value="2" step="1">
+    <span class="sl">fast</span>
+  </div>
+  <div class="speed-row" style="max-width:100%">
+    <span class="sl">small</span>
+    <input type="range" id="tkSize" min="1" max="5" value="3" step="1">
+    <span class="sl">large</span>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -371,6 +396,26 @@ cvs.addEventListener('mouseleave', endDraw);
 cvs.addEventListener('touchstart', startDraw, {passive:false});
 cvs.addEventListener('touchmove',  moveDraw,  {passive:false});
 cvs.addEventListener('touchend',   endDraw);
+
+async function sendTicker() {
+  const text = document.getElementById('tkText').value.trim();
+  if (!text) { toast('enter a message', false); return; }
+  const speed = document.getElementById('tkSpd').value;
+  const size  = document.getElementById('tkSize').value;
+  const bg    = document.getElementById('bgCol').value.replace('#','');
+  const pen   = document.getElementById('penCol').value.replace('#','');
+  if (!await req('/ticker?text=' + encodeURIComponent(text)
+    + '&speed=' + speed + '&size=' + size
+    + '&bg=' + bg + '&pen=' + pen)) return;
+  toast('ticker sent');
+}
+async function stopTicker() {
+  if (!await req('/ticker?action=stop')) return;
+  toast('ticker stopped');
+}
+document.getElementById('tkText').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); sendTicker(); }
+});
 
 async function clearAll() {
   const bg = document.getElementById('bgCol').value;
