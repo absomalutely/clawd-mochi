@@ -31,6 +31,11 @@ void routeCmd() {
       currentView = VIEW_EYES_NORMAL;
       animLogoReveal();
       break;
+    case 'x':
+      currentView = VIEW_WEATHER;
+      wxValid = false;  // force refresh
+      drawWeatherView();
+      break;
   }
 }
 
@@ -126,6 +131,8 @@ void routeState() {
   j += ",\"term\":";   j += termMode    ? "true" : "false";
   j += ",\"bl\":";     j += backlightOn ? "true" : "false";
   j += ",\"speed\":";  j += animSpeed;
+  j += ",\"sta\":";    j += wifiIsStaConnected() ? "true" : "false";
+  j += ",\"sta_ip\":\""; j += staIP; j += "\"";
   j += "}";
   server.send(200, "application/json", j);
 }
@@ -156,6 +163,44 @@ void routeTicker() {
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
+void routeWifiConfig() {
+  lastInteractionMs = millis();
+  if (server.method() == HTTP_POST || server.hasArg("ssid")) {
+    String ssid = server.arg("ssid");
+    String pass = server.arg("pass");
+    if (ssid.length() == 0) {
+      server.send(400, "application/json", "{\"e\":\"no ssid\"}"); return;
+    }
+    wifiSaveCredentials(ssid, pass);
+    server.send(200, "application/json", "{\"ok\":1,\"msg\":\"saved, reboot to connect\"}");
+    return;
+  }
+  // GET — return status
+  String j = "{\"connected\":"; j += wifiIsStaConnected() ? "true" : "false";
+  j += ",\"ssid\":\""; j += staSSID;
+  j += "\",\"ip\":\""; j += staIP;
+  j += "\"}";
+  server.send(200, "application/json", j);
+}
+
+void routeWeatherConfig() {
+  lastInteractionMs = millis();
+  if (server.hasArg("key") || server.hasArg("lat") || server.hasArg("lon")) {
+    if (server.hasArg("key")) wxSetPref("owm_key", server.arg("key"));
+    if (server.hasArg("lat")) wxSetPref("owm_lat", server.arg("lat"));
+    if (server.hasArg("lon")) wxSetPref("owm_lon", server.arg("lon"));
+    server.send(200, "application/json", "{\"ok\":1}");
+    return;
+  }
+  // GET — return current config (mask API key)
+  String key = wxGetPref("owm_key");
+  String j = "{\"hasKey\":"; j += key.length() > 0 ? "true" : "false";
+  j += ",\"lat\":\""; j += wxGetPref("owm_lat");
+  j += "\",\"lon\":\""; j += wxGetPref("owm_lon");
+  j += "\"}";
+  server.send(200, "application/json", j);
+}
+
 void routeNotFound() { server.send(404, "text/plain", "not found"); }
 
 // ── Route registration ───────────────────────────────────────
@@ -172,5 +217,7 @@ void registerRoutes() {
   server.on("/backlight",   HTTP_GET, routeBacklight);
   server.on("/state",       HTTP_GET, routeState);
   server.on("/ticker",      HTTP_GET, routeTicker);
+  server.on("/config/wifi",    HTTP_ANY, routeWifiConfig);
+  server.on("/config/weather", HTTP_ANY, routeWeatherConfig);
   server.onNotFound(routeNotFound);
 }

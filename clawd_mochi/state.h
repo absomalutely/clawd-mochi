@@ -22,5 +22,13 @@ extern String  termLines[];
 extern uint8_t termRow;
 extern uint8_t termCol;
 
+// ── WiFi state ────────────────────────────────────────────────
+extern bool   staConnected;
+extern String staSSID;
+extern String staIP;
+
+// ── Weather state ─────────────────────────────────────────────
+extern bool wxValid;
+
 // ── WebServer ─────────────────────────────────────────────────
 extern WebServer server;

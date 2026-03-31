@@ -52,6 +52,7 @@ body{background:#1c1c20;font-family:'Courier New',monospace;color:#e8e4dc;
 .vbtn[data-v="1"].active{border-color:#c96a3e;background:#201408}
 .vbtn[data-v="2"].active{border-color:#4a8acd;background:#0c1628}
 .vbtn[data-v="3"].active{border-color:#38343a;background:#201c18}
+.vbtn[data-v="5"].active{border-color:#ffcc33;background:#181408}
 
 .speed-row{width:100%;max-width:390px;display:flex;align-items:center;gap:10px}
 .sl{font-size:10px;color:#6a6058;white-space:nowrap;min-width:36px}
@@ -135,6 +136,11 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="nm">Canvas</span>
     <span class="ht">draw on display</span>
   </button>
+  <button class="vbtn" data-v="5" onclick="setView(5)">
+    <span class="ic">&#9729;</span>
+    <span class="nm">Weather</span>
+    <span class="ht">current conditions</span>
+  </button>
 </div>
 
 <div class="sec">// speed</div>
@@ -198,6 +204,47 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="sl">small</span>
     <input type="range" id="tkSize" min="1" max="5" value="3" step="1">
     <span class="sl">large</span>
+  </div>
+</div>
+
+<div class="sec">// wifi settings</div>
+<div class="twrap open" id="wfwrap">
+  <div class="thdr">
+    <span class="tttl" style="color:#4a8acd">&#8801; home wifi</span>
+    <span id="wfStatus" style="font-size:10px;color:#5a5048">...</span>
+  </div>
+  <div class="trow">
+    <input class="tin" id="wfSSID" type="text" placeholder="SSID"
+           style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  </div>
+  <div class="trow">
+    <input class="tin" id="wfPass" type="password" placeholder="password"
+           style="border-color:#1a2838;color:#4a8acd;background:#0c1018"
+           autocomplete="off">
+    <button class="tgo" style="background:#4a8acd" onclick="saveWifi()">&#10003;</button>
+  </div>
+</div>
+
+<div class="sec">// weather config</div>
+<div class="twrap open" id="wxwrap">
+  <div class="thdr">
+    <span class="tttl" style="color:#ffcc33">&#9729; openweathermap</span>
+    <span id="wxStatus" style="font-size:10px;color:#5a5048">...</span>
+  </div>
+  <div class="trow">
+    <input class="tin" id="wxKey" type="password" placeholder="API key"
+           style="border-color:#38301a;color:#ffcc33;background:#181408"
+           autocomplete="off">
+  </div>
+  <div class="trow">
+    <input class="tin" id="wxLat" type="text" placeholder="latitude"
+           style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
+           autocomplete="off">
+    <input class="tin" id="wxLon" type="text" placeholder="longitude"
+           style="border-color:#38301a;color:#ffcc33;background:#181408;flex:1"
+           autocomplete="off">
+    <button class="tgo" style="background:#cc9a20" onclick="saveWeather()">&#10003;</button>
   </div>
 </div>
 
@@ -270,7 +317,7 @@ async function setSpeed(v) {
 async function setView(v) {
   if (isBusy || termOpen || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }
-  const keys = ['w','s','d'];
+  const keys = {0:'w', 1:'s', 2:'d', 5:'x'};
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
   document.querySelectorAll('.vbtn').forEach(b =>
@@ -417,6 +464,61 @@ document.getElementById('tkText').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); sendTicker(); }
 });
 
+async function saveWifi() {
+  const ssid = document.getElementById('wfSSID').value.trim();
+  const pass = document.getElementById('wfPass').value;
+  if (!ssid) { toast('enter SSID', false); return; }
+  if (!await req('/config/wifi?ssid=' + encodeURIComponent(ssid) + '&pass=' + encodeURIComponent(pass))) return;
+  toast('saved — reboot to connect');
+}
+async function checkWifiStatus() {
+  try {
+    const r = await fetch('/config/wifi');
+    const j = await r.json();
+    const el = document.getElementById('wfStatus');
+    if (j.connected) {
+      el.textContent = '\u2713 ' + j.ssid + ' (' + j.ip + ')';
+      el.style.color = '#28b878';
+    } else if (j.ssid) {
+      el.textContent = '\u2717 ' + j.ssid;
+      el.style.color = '#c96a3e';
+    } else {
+      el.textContent = 'not configured';
+    }
+  } catch(e) {}
+}
+
+async function saveWeather() {
+  const key = document.getElementById('wxKey').value.trim();
+  const lat = document.getElementById('wxLat').value.trim();
+  const lon = document.getElementById('wxLon').value.trim();
+  if (!key && !lat && !lon) { toast('enter at least one field', false); return; }
+  let q = '/config/weather?';
+  if (key) q += 'key=' + encodeURIComponent(key) + '&';
+  if (lat) q += 'lat=' + encodeURIComponent(lat) + '&';
+  if (lon) q += 'lon=' + encodeURIComponent(lon);
+  if (!await req(q)) return;
+  toast('weather config saved');
+  checkWeatherStatus();
+}
+async function checkWeatherStatus() {
+  try {
+    const r = await fetch('/config/weather');
+    const j = await r.json();
+    const el = document.getElementById('wxStatus');
+    if (j.hasKey && j.lat) {
+      el.textContent = '\u2713 configured (' + j.lat + ', ' + j.lon + ')';
+      el.style.color = '#28b878';
+    } else if (j.hasKey) {
+      el.textContent = 'need location';
+      el.style.color = '#c96a3e';
+    } else {
+      el.textContent = 'need API key';
+      el.style.color = '#5a5048';
+    }
+  } catch(e) {}
+}
+
 async function clearAll() {
   const bg = document.getElementById('bgCol').value;
   redrawCanvas(bg);
@@ -440,6 +542,8 @@ async function clearAll() {
   } catch(e) {}
   document.getElementById('bgCol').value = '#aa4818';
   redrawCanvas('#aa4818');
+  checkWifiStatus();
+  checkWeatherStatus();
 })();
 </script>
 </body>

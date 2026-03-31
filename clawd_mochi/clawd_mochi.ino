@@ -20,6 +20,9 @@
 #include <math.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Preferences.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 #include "config.h"
 #include "display.h"
@@ -106,4 +109,5 @@ void loop() {
   server.handleClient();
   loopIdle();
   loopTicker();
+  loopWeather();
 }
