@@ -163,6 +163,11 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="nm">Starfield</span>
     <span class="ht">warp speed</span>
   </button>
+  <button class="vbtn" data-v="14" onclick="setView(14)">
+    <span class="ic">&#9788;</span>
+    <span class="nm">Plasma</span>
+    <span class="ht">colour waves</span>
+  </button>
   <button class="vbtn" data-v="5" onclick="setView(5)">
     <span class="ic">&#9729;</span>
     <span class="nm">Weather</span>
@@ -354,7 +359,7 @@ async function setSpeed(v) {
 async function setView(v) {
   if (isBusy || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }
-  const keys = {0:'w', 1:'s', 5:'x', 10:'L', 11:'M', 13:'S'};
+  const keys = {0:'w', 1:'s', 5:'x', 10:'L', 11:'M', 13:'S', 14:'P'};
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
   document.querySelectorAll('.vbtn').forEach(b =>

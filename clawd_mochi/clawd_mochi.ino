@@ -102,6 +102,8 @@ void setup() {
     matrixStart();
   } else if (currentView == VIEW_SS_STARS) {
     starsStart();
+  } else if (currentView == VIEW_SS_PLASMA) {
+    plasmaStart();
   } else if (currentView == VIEW_WEATHER) {
     drawWeatherView();
   } else {
@@ -123,4 +125,5 @@ void loop() {
   loopLife();
   loopMatrix();
   loopStars();
+  loopPlasma();
 }

@@ -31,6 +31,7 @@ void routeCmd() {
     case 'L': lifeStart(); break;
     case 'M': matrixStart(); break;
     case 'S': starsStart(); break;
+    case 'P': plasmaStart(); break;
   }
   saveSettings();
 }
