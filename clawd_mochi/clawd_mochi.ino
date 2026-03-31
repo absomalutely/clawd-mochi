@@ -92,6 +92,10 @@ void setup() {
   // Register web routes and start server
   registerRoutes();
   server.begin();
+
+  // Draw initial view so screen is ready before idle animations
+  drawNormalEyes();
+  lastInteractionMs = millis();
 }
 
 // ═════════════════════════════════════════════════════════════
