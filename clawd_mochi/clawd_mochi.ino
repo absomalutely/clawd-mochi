@@ -96,6 +96,8 @@ void setup() {
     gfx->fillScreen(drawBgColor);
   } else if (currentView == VIEW_EYES_SQUISH) {
     drawSquishEyes();
+  } else if (currentView == VIEW_SS_LIFE) {
+    lifeStart();
   } else if (currentView == VIEW_WEATHER) {
     drawWeatherView();
   } else {
@@ -114,4 +116,5 @@ void loop() {
   loopIdle();
   loopTicker();
   loopWeather();
+  loopLife();
 }

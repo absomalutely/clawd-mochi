@@ -148,6 +148,11 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="nm">Canvas</span>
     <span class="ht">draw on display</span>
   </button>
+  <button class="vbtn" data-v="10" onclick="setView(10)">
+    <span class="ic">&#9724;</span>
+    <span class="nm">Life</span>
+    <span class="ht">cellular automata</span>
+  </button>
   <button class="vbtn" data-v="5" onclick="setView(5)">
     <span class="ic">&#9729;</span>
     <span class="nm">Weather</span>
@@ -339,7 +344,7 @@ async function setSpeed(v) {
 async function setView(v) {
   if (isBusy || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }
-  const keys = {0:'w', 1:'s', 5:'x'};
+  const keys = {0:'w', 1:'s', 5:'x', 10:'L'};
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
   document.querySelectorAll('.vbtn').forEach(b =>

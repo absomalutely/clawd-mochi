@@ -28,6 +28,7 @@ void routeCmd() {
       wxValid = false;
       drawWeatherView();
       break;
+    case 'L': lifeStart(); break;
   }
   saveSettings();
 }

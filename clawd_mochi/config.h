@@ -27,6 +27,11 @@
 #define VIEW_TICKER      4
 #define VIEW_WEATHER     5
 #define VIEW_TOKENS      6
+#define VIEW_SS_LIFE     10
+#define VIEW_SS_MATRIX   11
+#define VIEW_SS_FIRE     12
+#define VIEW_SS_STARS    13
+#define VIEW_SS_PLASMA   14
 
 // ── Logo ──────────────────────────────────────────────────────
 #define LOGO_CX 120
