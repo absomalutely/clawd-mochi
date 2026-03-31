@@ -32,6 +32,7 @@
 #define VIEW_SS_FIRE     12
 #define VIEW_SS_STARS    13
 #define VIEW_SS_PLASMA   14
+#define VIEW_POMODORO    20
 
 // ── Logo ──────────────────────────────────────────────────────
 #define LOGO_CX 120

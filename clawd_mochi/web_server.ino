@@ -32,6 +32,7 @@ void routeCmd() {
     case 'M': matrixStart(); break;
     case 'S': starsStart(); break;
     case 'P': plasmaStart(); break;
+    case 'T': pomStart(); break;
   }
   saveSettings();
 }
@@ -181,6 +182,24 @@ void routeWeatherConfig() {
   server.send(200, "application/json", j);
 }
 
+void routePomodoro() {
+  lastInteractionMs = millis();
+  if (server.hasArg("action")) {
+    pomHandleCmd(server.arg("action"));
+  }
+  if (server.hasArg("work")) {
+    pomWorkMins = constrain(server.arg("work").toInt(), 1, 90);
+  }
+  if (server.hasArg("brk")) {
+    pomBreakMins = constrain(server.arg("brk").toInt(), 1, 30);
+  }
+  String j = "{\"state\":"; j += pomState;
+  j += ",\"work\":"; j += pomWorkMins;
+  j += ",\"brk\":"; j += pomBreakMins;
+  j += "}";
+  server.send(200, "application/json", j);
+}
+
 void routeAPConfig() {
   lastInteractionMs = millis();
   if (server.hasArg("ssid")) {
@@ -213,6 +232,7 @@ void registerRoutes() {
   server.on("/backlight",   HTTP_GET, routeBacklight);
   server.on("/state",       HTTP_GET, routeState);
   server.on("/ticker",      HTTP_GET, routeTicker);
+  server.on("/pomodoro",       HTTP_GET, routePomodoro);
   server.on("/config/wifi",    HTTP_ANY, routeWifiConfig);
   server.on("/config/ap",      HTTP_ANY, routeAPConfig);
   server.on("/config/weather", HTTP_ANY, routeWeatherConfig);

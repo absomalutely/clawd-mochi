@@ -42,7 +42,7 @@ void initColours() {
   C_MUTED  = gfx->color565(90,  88,  86);
   C_GREEN  = gfx->color565(80,  220, 130);
   animBgColor = C_ORANGE;
-  drawBgColor = C_ORANGE;
+  drawBgColor = C_BLACK;
 }
 
 // ── Settings persistence (NVS) ───────────────────────────────
@@ -61,7 +61,7 @@ void loadSettings() {
   Preferences p;
   p.begin("clawd", true);
   animBgColor  = p.getUShort("bg_color", C_ORANGE);
-  drawBgColor  = p.getUShort("pen_color", C_ORANGE);
+  drawBgColor  = p.getUShort("pen_color", C_BLACK);
   currentView  = p.getUChar("last_view", VIEW_EYES_NORMAL);
   brightness   = p.getUChar("brightness", 255);
   p.end();

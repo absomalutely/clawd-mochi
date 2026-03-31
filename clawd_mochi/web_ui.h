@@ -168,6 +168,11 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="nm">Plasma</span>
     <span class="ht">colour waves</span>
   </button>
+  <button class="vbtn" data-v="20" onclick="setView(20)">
+    <span class="ic">&#9201;</span>
+    <span class="nm">Pomodoro</span>
+    <span class="ht">focus timer</span>
+  </button>
   <button class="vbtn" data-v="5" onclick="setView(5)">
     <span class="ic">&#9729;</span>
     <span class="nm">Weather</span>
@@ -228,6 +233,29 @@ canvas{width:100%;border-radius:8px;border:1.5px solid #38343a;
     <span class="sl">small</span>
     <input type="range" id="tkSize" min="1" max="5" value="3" step="1">
     <span class="sl">large</span>
+  </div>
+</div>
+
+<div class="sec">// pomodoro</div>
+<div class="twrap open" id="pomwrap">
+  <div class="thdr">
+    <span class="tttl" style="color:#c96a3e">&#9201; focus timer</span>
+    <span id="pomStatus" style="font-size:10px;color:#5a5048">idle</span>
+  </div>
+  <div class="ctrl">
+    <button class="cbtn on" onclick="pomCmd('start')">&#9654; start</button>
+    <button class="cbtn" onclick="pomCmd('skip')">&#9197; skip</button>
+    <button class="cbtn" onclick="pomCmd('stop')">&#9632; stop</button>
+  </div>
+  <div class="speed-row" style="max-width:100%">
+    <span class="sl">work</span>
+    <input type="range" id="pomWork" min="1" max="90" value="25" step="1" oninput="pomSetDur()">
+    <span class="sv" id="pomWorkV">25m</span>
+  </div>
+  <div class="speed-row" style="max-width:100%">
+    <span class="sl">break</span>
+    <input type="range" id="pomBreak" min="1" max="30" value="5" step="1" oninput="pomSetDur()">
+    <span class="sv" id="pomBreakV">5m</span>
   </div>
 </div>
 
@@ -359,7 +387,7 @@ async function setSpeed(v) {
 async function setView(v) {
   if (isBusy || canvasOpen) return;
   if (v === 3) { toggleCanvas(); return; }
-  const keys = {0:'w', 1:'s', 5:'x', 10:'L', 11:'M', 13:'S', 14:'P'};
+  const keys = {0:'w', 1:'s', 5:'x', 10:'L', 11:'M', 13:'S', 14:'P', 20:'T'};
   if (!await req('/cmd?k=' + keys[v])) return;
   activeView = v;
   document.querySelectorAll('.vbtn').forEach(b =>
@@ -482,6 +510,19 @@ async function stopTicker() {
 document.getElementById('tkText').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); sendTicker(); }
 });
+
+async function pomCmd(action) {
+  await req('/pomodoro?action=' + action);
+  const labels = {start:'started', stop:'stopped', skip:'skipped'};
+  toast('pomodoro ' + (labels[action] || action));
+}
+async function pomSetDur() {
+  const w = document.getElementById('pomWork').value;
+  const b = document.getElementById('pomBreak').value;
+  document.getElementById('pomWorkV').textContent = w + 'm';
+  document.getElementById('pomBreakV').textContent = b + 'm';
+  await req('/pomodoro?work=' + w + '&brk=' + b);
+}
 
 async function saveWifi() {
   const ssid = document.getElementById('wfSSID').value.trim();

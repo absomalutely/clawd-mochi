@@ -104,6 +104,8 @@ void setup() {
     starsStart();
   } else if (currentView == VIEW_SS_PLASMA) {
     plasmaStart();
+  } else if (currentView == VIEW_POMODORO) {
+    pomStart();
   } else if (currentView == VIEW_WEATHER) {
     drawWeatherView();
   } else {
@@ -126,4 +128,5 @@ void loop() {
   loopMatrix();
   loopStars();
   loopPlasma();
+  loopPomodoro();
 }
