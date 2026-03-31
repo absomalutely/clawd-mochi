@@ -98,6 +98,8 @@ void setup() {
     drawSquishEyes();
   } else if (currentView == VIEW_SS_LIFE) {
     lifeStart();
+  } else if (currentView == VIEW_SS_MATRIX) {
+    matrixStart();
   } else if (currentView == VIEW_WEATHER) {
     drawWeatherView();
   } else {
@@ -117,4 +119,5 @@ void loop() {
   loopTicker();
   loopWeather();
   loopLife();
+  loopMatrix();
 }

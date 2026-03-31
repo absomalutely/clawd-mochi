@@ -29,6 +29,7 @@ void routeCmd() {
       drawWeatherView();
       break;
     case 'L': lifeStart(); break;
+    case 'M': matrixStart(); break;
   }
   saveSettings();
 }
